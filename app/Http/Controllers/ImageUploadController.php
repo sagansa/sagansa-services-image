@@ -48,10 +48,13 @@ class ImageUploadController extends Controller
 
             $file = $request->file('image');
 
-            // Ensure storage directory exists
-            $storagePath = public_path('storage');
-            if (!is_dir($storagePath)) {
-                mkdir($storagePath, 0755, true);
+            // Optional directory (e.g. "ops/product", "ops/attendance")
+            $directory = trim($request->input('directory', ''), '/');
+            if ($directory) {
+                // Validate directory contains only safe characters
+                if (!preg_match('/^[a-zA-Z0-9_\-\/]+$/', $directory)) {
+                    return response()->json(['error' => 'Invalid directory format.'], 422);
+                }
             }
 
             // Use Intervention Image to convert to webp
@@ -64,14 +67,15 @@ class ImageUploadController extends Controller
             // Generate unique filename
             $filename = Str::uuid() . '.webp';
 
-            // Store the file in the public disk
-            Storage::disk('public')->put($filename, (string) $encoded);
+            // Store the file in the public disk under the directory
+            $storagePath = $directory ? "{$directory}/{$filename}" : $filename;
+            Storage::disk('public')->put($storagePath, (string) $encoded);
 
             // Return the public URL
             return response()->json([
                 'success' => true,
-                'url' => config('app.url') . Storage::url($filename),
-                'path' => $filename
+                'url' => config('app.url') . Storage::url($storagePath),
+                'path' => $storagePath
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
