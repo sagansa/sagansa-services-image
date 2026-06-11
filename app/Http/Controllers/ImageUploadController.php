@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 
 use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 use Intervention\Image\Encoders\WebpEncoder;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -54,7 +55,7 @@ class ImageUploadController extends Controller
             }
 
             // Use Intervention Image to convert to webp
-            $manager = new ImageManager('gd');
+            $manager = new ImageManager(Driver::class);
             $image = $manager->decodePath($file->getRealPath());
 
             // Encode to webp format with 80% quality
