@@ -69,6 +69,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Token Model
+    |--------------------------------------------------------------------------
+    |
+    | Sanctum stores tokens in personal_access_tokens. Override the model
+    | so the token lookup uses the mysql_auth connection (sagansa_user DB).
+    |
+    */
+
+    'token_model' => \App\Models\PersonalAccessToken::class,
+
+    /*
+    |--------------------------------------------------------------------------
     | Sanctum Middleware
     |--------------------------------------------------------------------------
     |
