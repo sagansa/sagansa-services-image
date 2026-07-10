@@ -44,7 +44,16 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
-        'mysql' => [
+        'mysql' => env('APP_ENV') === 'testing' ? [
+            'driver' => 'sqlite',
+            'url' => env('DB_URL'),
+            'database' => database_path('database_test.sqlite'),
+            'prefix' => '',
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            'busy_timeout' => 5000,
+            'journal_mode' => 'WAL',
+            'synchronous' => null,
+        ] : [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
@@ -52,6 +61,38 @@ return [
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
+        // Koneksi ke sagansa_user untuk validasi Sanctum token.
+        // Token yang dikeluarkan api-ops (atau app lain) saat login langsung valid
+        // di service ini karena membaca tabel personal_access_tokens yang sama.
+        'mysql_auth' => env('APP_ENV') === 'testing' ? [
+            'driver' => 'sqlite',
+            'url' => env('DB_URL'),
+            'database' => database_path('database_test.sqlite'),
+            'prefix' => '',
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            'busy_timeout' => 5000,
+            'journal_mode' => 'WAL',
+            'synchronous' => null,
+        ] : [
+            'driver' => 'mysql',
+            'url' => env('DB_URL'),
+            'host' => env('DB_AUTH_HOST', '127.0.0.1'),
+            'port' => env('DB_AUTH_PORT', '3306'),
+            'database' => env('DB_AUTH_DATABASE', 'sagansa_user'),
+            'username' => env('DB_AUTH_USERNAME', 'root'),
+            'password' => env('DB_AUTH_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),

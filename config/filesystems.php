@@ -62,19 +62,9 @@ return [
 
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Symbolic Links
-    |--------------------------------------------------------------------------
-    |
-    | Here you may configure the symbolic links that will be created when the
-    | `storage:link` Artisan command is executed. The array keys should be
-    | the locations of the links and the values should be their targets.
-    |
-    */
-
-    'links' => [
-        public_path('storage') => storage_path('app/public'),
-    ],
+    // NOTE: Disk `public` menulis langsung ke public_path('storage') (lihat konfigurasi
+    // disk di atas), sehingga tidak memerlukan symlink `storage:link` di Hostinger.
+    // Konfigurasi `links` untuk artisan `storage:link` sengaja tidak digunakan agar
+    // tidak bertabrakan dengan direktori fisik public/storage yang sudah dipakai disk.
 
 ];

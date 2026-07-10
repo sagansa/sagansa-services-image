@@ -1,58 +1,106 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Sagansa Image Service (`img.sagansa.id`)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Microservice Laravel untuk penyimpanan & penyajian gambar. Gambar diupload via API (dikomversi ke WebP), disimpan ke disk `public`, dan disajikan langsung oleh web server dari `public/storage/`.
 
-## About Laravel
+## Arsitektur Auth
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Read (menampilkan gambar)**: publik. URL `https://img.sagansa.id/storage/{path}` langsung dibuka browser.
+- **Upload / Delete**: dilindungi **Laravel Sanctum** (`auth:sanctum`).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### Token lintas-service
+Service ini tidak menerbitkan token sendiri. Ia membaca tabel `personal_access_tokens` di database **`sagansa_user`** (koneksi `mysql_auth`, lihat `config/database.php`). Karena `services/api-ops` membaca tabel yang sama saat user login, **token yang dikeluarkan api-ops langsung valid di sini** — tidak perlu secret bersama, tidak perlu signed URL.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Setup auth meniru persis pola `api-ops`:
+- `app/Models/User.php`: `use HasApiTokens;` + `protected $connection = 'mysql_auth';`
+- `config/auth.php`: guard `sanctum`.
+- Migration `personal_access_tokens` **tidak ada di service ini** — sudah dikelola oleh `services/migration` di database `sagansa_user`.
 
-## Learning Laravel
+## Endpoint
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Method | Path | Auth | Deskripsi |
+|--------|------|------|-----------|
+| `POST` | `/api/upload` | Sanctum bearer | Upload gambar → WebP. Body: `multipart/form-data` field `image` (+ opsional `directory`). Rate limited 30/min. |
+| `DELETE` | `/api/images` | Sanctum bearer | Hapus by relative path. Body JSON: `{"path":"..."}`. |
+| `GET` | `/api/user` | Sanctum bearer | Info user token (debug). |
+| `GET` | `/up` | — | Health check. |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Contoh upload
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+# Token bearer = token login dari api-ops (atau app lain yang pakai sagansa_user)
+curl -X POST https://img.sagansa.id/api/upload \
+  -H "Authorization: Bearer <token>" \
+  -F "image=@photo.jpg" \
+  -F "directory=ops/product"
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Response:
+```json
+{
+  "success": true,
+  "url": "https://img.sagansa.id/storage/ops/product/<uuid>.webp",
+  "path": "ops/product/<uuid>.webp"
+}
+```
 
-## Contributing
+```ts
+// apps/ops (lihat src/services/api.ts uploadImage)
+const path = await api.uploadImage(file, 'ops/product');
+// kirim `path` ke backend api-ops untuk disimpan di DB
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Environment Variables (`.env`)
 
-## Code of Conduct
+| Var | Wajib | Contoh | Keterangan |
+|-----|-------|--------|------------|
+| `APP_URL` | ya | `https://img.sagansa.id` | Basis URL gambar. |
+| `APP_ENV` | ya | `production` | Harus `production` di server. |
+| `APP_DEBUG` | ya | `false` | Harus `false` di server. |
+| `APP_KEY` | ya | (generate) | `php artisan key:generate`. |
+| `DB_*` | ya | — | Koneksi default → `sagansa_img` (cache/session/queue). |
+| `DB_AUTH_*` | ya | — | Koneksi `sagansa_user` untuk validasi token Sanctum. |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+> `IMAGE_UPLOAD_SECRET` (skema HMAC lama) sudah tidak dipakai sejak migrasi ke Sanctum.
 
-## Security Vulnerabilities
+## Penyimpanan File
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- Disk `public` (`config/filesystems.php`) root = `public_path('storage')`. File ditulis langsung ke `public/storage/{directory}/{uuid}.webp` — **tanpa symlink** `storage:link` (sesuai kebutuhan Hostinger). Array `links` sengaja dikosongkan.
+- Re-encode ke WebP via Intervention Image (GD driver) menormalkan payload & menghapus metadata.
 
-## License
+## Migrasi File Lama
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Salin file gambar lama dari storage app lain (mis. `apps/admin`) ke service ini, mempertahankan relative path:
+
+```bash
+# Dry-run dulu untuk lihat rencana
+php artisan img:migrate-legacy --dry /path/admin/storage/app/public/images
+
+# Jalankan
+php artisan img:migrate-legacy /path/admin/storage/app/public/images /path/admin/storage/app/public/apks
+```
+
+Atau via `rsync` langsung di server (lebih cepat untuk file banyak):
+```bash
+rsync -av --relative /path/admin/storage/app/public/images/./ /path/img/public/storage/
+```
+
+## Deploy (Hostinger)
+
+1. Set DNS `img.sagansa.id` → server.
+2. vhost domain mengarah ke `services/img/public`.
+3. Pastikan ekstensi PHP: `gd` **+ WebP support** (`php -m | grep gd`; `gd` harus mendukung WebP).
+4. Web server hardening:
+   - `client_max_body_size` (nginx) / `LimitRequestBody` (Apache) ≥ 12M.
+   - `upload_max_filesize` + `post_max_size` PHP ≥ 12M.
+   - **Disable eksekusi PHP** di direktori `storage` (file gambar harus di-serve statis).
+5. Set `.env` produksi (lihat tabel di atas).
+6. `php artisan key:generate` (jika `APP_KEY` kosong).
+7. `php artisan migrate` (membuat tabel cache/session/queue di `sagansa_img`). Tabel `personal_access_tokens` **tidak dibuat** di sini — pastikan `sagansa_user` (dari `services/migration`) sudah punya tabel tersebut.
+8. `php artisan config:cache && php artisan route:cache`.
+
+## Integrasi dengan App Lain
+
+- **`apps/ops` + `services/api-ops`**: sudah terintegrasi. `apps/ops` POST langsung ke `/api/upload` dengan bearer token (lihat `src/services/api.ts`).
+- **`apps/admin`**:
+  - Serving: `app/Support/PublicStorageUrl.php` membangun URL dari `IMG_SERVICE_URL` (default `https://img.sagansa.id`). Set `IMG_SERVICE_URL` di `.env`.
+  - Upload: (rencana) admin pakai service-account token, detail menyusul.
