@@ -18,14 +18,16 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Force /storage/* through Laravel so PHP can add CORS headers.
-    # Without this, Apache serves the files directly and the CDN strips headers.
-    RewriteCond %{REQUEST_URI} ^/storage/
-    RewriteRule ^ index.php [L]
-
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
 
+# CORS untuk file gambar di /storage (diperlukan FilePond fetch dari admin/ops)
+<IfModule mod_headers.c>
+    <FilesMatch "\.(webp|jpg|jpeg|png|gif|bmp|svg)$">
+        Header always set Access-Control-Allow-Origin "*"
+        Header always set Access-Control-Allow-Methods "GET, OPTIONS"
+    </FilesMatch>
+</IfModule>
